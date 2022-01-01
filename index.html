@@ -15,28 +15,65 @@ See also: <a href="http://xem.github.io/MiniShadertoyLite">MiniShadertoyLite</a>
 <br>
 <br>
 <br>
-(T: playback time / R: viewport resolution / M: mouse coords (xy), click coords (zw) / F: playback frame / O: gl_FragColor / C: gl_FragCoord / D: time delta / t: sound sample / S: sample rate)
+(T: playback time / R: viewport resolution / M: mouse coords (xy), click coords (zw) / F: playback frame / O: gl_FragColor / C: gl_FragCoord / D: time delta / B: buffer / t: sound sample / S: sample rate)
 <br>
 <br>
 <!-- golf starts here -->
 
 <textarea id=c cols=35 rows=22 spellcheck=false>// SHADER (OpenGL)
 
-void main(){
-  O=vec4(
-    (C.x-M.x/10.0)/R.x,
-    (C.y+M.y/10.0)/R.y,
-    0.5+0.5*sin(T),
-    0.5+1.0/F/10.0
-  );
+#define A(i,j) texture2D(B, (C.xy + vec2(i,j)) / R.xy)
+
+// 1 out, 3 in... <https://www.shadertoy.com/view/4djSRW>
+#define MOD3 vec3(.1031,.11369,.13787)
+float hash13(vec3 p3) {
+    p3 = fract(p3 * MOD3);
+    p3 += dot(p3, p3.yzx+19.19);
+    return fract((p3.x + p3.y)*p3.z);
+}
+
+void main() {
+    O = vec4(0,0,0,1);
+    if(F < 10.) {
+        if(length(C.xy-10.) < 2.) O.y = 1.;
+        return;
+    }
+    
+    if(C.x < 1. || C.x > R.x-1. || C.y < 1. || C.y > R.y-1.) {
+        O.x = 1.;
+        return;
+    }
+    
+    vec4 c  = A( 0, 0);
+    vec4 n  = A( 0, 1);
+    vec4 ne = A( 1, 1);
+    vec4 e  = A( 1, 0);
+    vec4 se = A( 1,-1);
+    vec4 s  = A( 0,-1);
+    vec4 sw = A(-1,-1);
+    vec4 w  = A(-1, 0);
+    vec4 nw = A(-1, 1);
+    
+    // aggregation
+    O.y = clamp(c.y + c.x * (n.y + ne.y + e.y + se.y + s.y + sw.y + w.y + nw.y), 0., 1.);
+    
+    bool nc = int(4.*hash13(vec3(C.xy + vec2( 0, 1), F))) == 0;
+    bool ec = int(4.*hash13(vec3(C.xy + vec2( 1, 0), F))) == 1;
+    bool sc = int(4.*hash13(vec3(C.xy + vec2( 0,-1), F))) == 2;
+    bool wc = int(4.*hash13(vec3(C.xy + vec2(-1, 0), F))) == 3;
+    
+    // diffusion
+    O.x = clamp(
+      n.x * float(nc) + e.x * float(ec) + s.x * float(sc) + w.x * float(wc) +
+      floor((1. + (n.x + e.x + s.x + w.x)/100.) * hash13(vec3(C.xy,F))), 0., 1.);
+    
+    O.x *= 1. - O.y;
 }</textarea>
 <textarea id=s cols=35 rows=22 spellcheck=false>// SOUND (JS)
 f=function(t){
-  return Math.sin(
-    (t%8000)*T
-  )/500;
+  return 0;
 }</textarea>
-<canvas id=a width=640 height=360 style="border: 1px solid">
+<canvas id=a width=1024 height=1024 style="border: 1px solid">
 
 <script>
 // Inspired by:
@@ -70,13 +107,23 @@ M=[0,0];
 
   // Compile and attach it to the program
   g.compileShader(S);
+  if (!g.getShaderParameter(S, g.COMPILE_STATUS)) {
+    g.getShaderInfoLog(S).trim().split("\n").forEach(ss =>
+    console.warn("[shader] " + ss))
+    throw new Error("Error while compiling shader")
+  };
   g.attachShader(P,S);
 
   // Main program
-  g.shaderSource(S=g.createShader(g.FRAGMENT_SHADER),"precision mediump float;uniform float T,F,D;uniform vec2 R;uniform vec4 M;"+c.value.replace(/\bO\b/g,"gl_FragColor").replace(/\bC\b/g,"gl_FragCoord"));
+  g.shaderSource(S=g.createShader(g.FRAGMENT_SHADER),"precision mediump float;uniform float T,F,D;uniform vec2 R;uniform vec4 M;uniform sampler2D B;"+c.value.replace(/\bO\b/g,"gl_FragColor").replace(/\bC\b/g,"gl_FragCoord"));
 
   // Compile and attach it to the program
   g.compileShader(S);
+  if (!g.getShaderParameter(S, g.COMPILE_STATUS)) {
+    g.getShaderInfoLog(S).trim().split("\n").forEach(ss =>
+    console.warn("[shader] " + ss))
+    throw new Error("Error while compiling shader")
+  };
   g.attachShader(P,S);
 
   // Link and start the program
@@ -92,7 +139,16 @@ M=[0,0];
   // Main loop
   T=0;
   F=0;
-  
+
+  X = [];
+  B = [];
+  for(i of [0,1]) {
+    g.bindTexture(g.TEXTURE_2D, X[i] = g.createTexture());
+    g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, 1024, 1024, 0, g.RGBA, g.UNSIGNED_BYTE, null);
+    g.bindFramebuffer(g.FRAMEBUFFER, B[i] = g.createFramebuffer());
+    g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, X[i], 0);
+  }
+
   // Sound
   eval(s.value);
 })();
@@ -102,11 +158,16 @@ d = new Date();
 
 // Main loop
 (L=function(){
+  for(i of [B[F++%2], null]) {
+  g.bindFramebuffer(g.FRAMEBUFFER, i);
+  g.bindTexture(g.TEXTURE_2D, X[F%2]);
+  g.generateMipmap(g.TEXTURE_2D);
+
   // Current playback time
   g.uniform1f(g.getUniformLocation(P,"T"),T+=.016);
   
   // Current playback frame
-  g.uniform1f(g.getUniformLocation(P,"F"),F++);
+  g.uniform1f(g.getUniformLocation(P,"F"),F);
   
   // Time delta
   g.uniform1f(g.getUniformLocation(P,"D"), d-(d=new Date()));
@@ -115,10 +176,14 @@ d = new Date();
   g.uniform4f(g.getUniformLocation(P,"M"),M[0],M[1],M[2],M[3]);
   
   // Viewport resolution
-  g.uniform2f(g.getUniformLocation(P,"R"),640,360);
+  g.uniform2f(g.getUniformLocation(P,"R"),1024,1024);
+
+  // Buffer
+  g.uniform1i(g.getUniformLocation(P,"B"),0);
   
   // Draw
   g.drawArrays(g.TRIANGLE_FAN,0,3);
+  }
   
   // Next frame
   requestAnimationFrame(L);
@@ -171,7 +236,7 @@ w.onaudioprocess=function(e){
 <!-- romanesco 2.0's tetrahedron
 float t=5e-3;
 void main(){
-  vec2 R = vec2(640.0,360.0);
+  vec2 R = vec2(1024.0,1024.0);
   vec2 M = vec2(0.0,0.0);
   for( float i=0.;i<64.;i++){
     vec3 p=vec3((2.*gl_FragCoord.xy-R)/R.yy,t-1.),b=vec3(.707,.707,0);
