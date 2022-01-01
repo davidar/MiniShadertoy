@@ -22,52 +22,16 @@ See also: <a href="http://xem.github.io/MiniShadertoyLite">MiniShadertoyLite</a>
 
 <textarea id=c cols=35 rows=22 spellcheck=false>// SHADER (OpenGL)
 
-#define A(i,j) texture2D(B, (C.xy + vec2(i,j)) / R.xy)
-
-// 1 out, 3 in... <https://www.shadertoy.com/view/4djSRW>
-#define MOD3 vec3(.1031,.11369,.13787)
-float hash13(vec3 p3) {
-    p3 = fract(p3 * MOD3);
-    p3 += dot(p3, p3.yzx+19.19);
-    return fract((p3.x + p3.y)*p3.z);
-}
+#define A texelFetch(B,ivec2(i+u),0)
 
 void main() {
-    O = vec4(0,0,0,1);
-    if(F < 10.) {
-        if(length(C.xy-10.) < 2.) O.y = 1.;
-        return;
-    }
-    
-    if(C.x < 1. || C.x > R.x-1. || C.y < 1. || C.y > R.y-1.) {
-        O.x = 1.;
-        return;
-    }
-    
-    vec4 c  = A( 0, 0);
-    vec4 n  = A( 0, 1);
-    vec4 ne = A( 1, 1);
-    vec4 e  = A( 1, 0);
-    vec4 se = A( 1,-1);
-    vec4 s  = A( 0,-1);
-    vec4 sw = A(-1,-1);
-    vec4 w  = A(-1, 0);
-    vec4 nw = A(-1, 1);
-    
-    // aggregation
-    O.y = clamp(c.y + c.x * (n.y + ne.y + e.y + se.y + s.y + sw.y + w.y + nw.y), 0., 1.);
-    
-    bool nc = int(4.*hash13(vec3(C.xy + vec2( 0, 1), F))) == 0;
-    bool ec = int(4.*hash13(vec3(C.xy + vec2( 1, 0), F))) == 1;
-    bool sc = int(4.*hash13(vec3(C.xy + vec2( 0,-1), F))) == 2;
-    bool wc = int(4.*hash13(vec3(C.xy + vec2(-1, 0), F))) == 3;
-    
-    // diffusion
-    O.x = clamp(
-      n.x * float(nc) + e.x * float(ec) + s.x * float(sc) + w.x * float(wc) +
-      floor((1. + (n.x + e.x + s.x + w.x)/100.) * hash13(vec3(C.xy,F))), 0., 1.);
-    
-    O.x *= 1. - O.y;
+  vec2 u = gl_FragCoord.xy;
+  vec2 v, i = u-u; O -= O;
+  for(int k=0; k++&lt;196; v = 99.*A.xy+i, O += vec4(v-i + v-v*A.w,0,1) * A.w / exp(dot(v,v)) / 3.142)
+    i = vec2(k%14,k/14)-7.;
+  O.xy /= O.w + 1e-6;
+  F%500&lt;2 ? O += vec4((u-.5*R)/1e3,0,.3) : O;
+  O.xy /= 99.;
 }</textarea>
 <textarea id=s cols=35 rows=22 spellcheck=false>// SOUND (JS)
 f=function(t){
@@ -88,7 +52,8 @@ if(l=location.hash){
 }
 
 // Get canvas WebGL context
-g=a.getContext("webgl");
+g=a.getContext("webgl2");
+g.getExtension('EXT_color_buffer_float');
 
 // Mouse coordinates
 M=[0,0];
@@ -103,7 +68,7 @@ M=[0,0];
   P=g.createProgram();
 
   // Basic vertex shader
-  g.shaderSource(S=g.createShader(g.VERTEX_SHADER),"attribute vec2 P;void main(){gl_Position=vec4(P,0,1);}");
+  g.shaderSource(S=g.createShader(g.VERTEX_SHADER),"#version 300 es\nin vec2 P;void main(){gl_Position=vec4(P,0,1);}");
 
   // Compile and attach it to the program
   g.compileShader(S);
@@ -115,7 +80,7 @@ M=[0,0];
   g.attachShader(P,S);
 
   // Main program
-  g.shaderSource(S=g.createShader(g.FRAGMENT_SHADER),"precision mediump float;uniform float T,F,D;uniform vec2 R;uniform vec4 M;uniform sampler2D B;"+c.value.replace(/\bO\b/g,"gl_FragColor").replace(/\bC\b/g,"gl_FragCoord"));
+  g.shaderSource(S=g.createShader(g.FRAGMENT_SHADER),"#version 300 es\nprecision mediump float;out vec4 O;uniform float T,D;uniform int F;uniform vec2 R;uniform vec4 M;uniform sampler2D B;"+c.value);
 
   // Compile and attach it to the program
   g.compileShader(S);
@@ -144,7 +109,11 @@ M=[0,0];
   B = [];
   for(i of [0,1]) {
     g.bindTexture(g.TEXTURE_2D, X[i] = g.createTexture());
-    g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, 1024, 1024, 0, g.RGBA, g.UNSIGNED_BYTE, null);
+    g.texImage2D(g.TEXTURE_2D, 0, g.RGBA16F, 1024, 1024, 0, g.RGBA, g.FLOAT, null);
+    //g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.NEAREST);
+    //g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.NEAREST);
+    //g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE);
+    //g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
     g.bindFramebuffer(g.FRAMEBUFFER, B[i] = g.createFramebuffer());
     g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, X[i], 0);
   }
@@ -167,7 +136,7 @@ d = new Date();
   g.uniform1f(g.getUniformLocation(P,"T"),T+=.016);
   
   // Current playback frame
-  g.uniform1f(g.getUniformLocation(P,"F"),F);
+  g.uniform1i(g.getUniformLocation(P,"F"),F);
   
   // Time delta
   g.uniform1f(g.getUniformLocation(P,"D"), d-(d=new Date()));
