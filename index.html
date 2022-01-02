@@ -1,103 +1,70 @@
-<canvas id=c width=1024 height=1024>
-
+<canvas id=c>
 <script>
-g=c.getContext("webgl2");
+c.width=c.height=1024;
+g=c.getContext`webgl2`;
 
 //g.getExtension("EXT_color_buffer_float");
 g.getExtension(g.getSupportedExtensions()[0]);
 
-//(() => {
-  // Define a new program
-  P=g.createProgram();
+P=g.createProgram();
 
-  // Basic vertex shader
-  g.shaderSource(S=g.createShader(g.VERTEX_SHADER),`#version 300 es
-  in vec2 P;
-  void main(){gl_Position.xy=P;}
-  `);
-
-  // Compile and attach it to the program
+// compile shader
+C=(t,s)=>{
+  g.shaderSource(S=g.createShader(t),"#version 300 es\n"+s);
   g.compileShader(S);
   //if (!g.getShaderParameter(S, g.COMPILE_STATUS)) {
   //  g.getShaderInfoLog(S).trim().split("\n").forEach(ss => console.warn("[shader] " + ss))
   //  throw new Error("Error while compiling shader")
   //};
   g.attachShader(P,S);
+}
 
-  // Main program
-  g.shaderSource(S=g.createShader(g.FRAGMENT_SHADER),`#version 300 es
-  precision mediump float;
-  out vec4 O;
-  uniform int F;
-  uniform vec2 R;
-  uniform sampler2D B;
-  #define A texelFetch(B,ivec2(i+u),0)
-  void main(){
-    vec2 u=gl_FragCoord.xy,v,i=u-u;O-=O;
-    for(int k=0;k++<196;v=9.*A.xy+i,O+=vec4(v-i+v-v*A.w,0,1)*A.w/exp(dot(v,v))/3.142)
-      i=vec2(k%14,k/14)-7.;
-    O.xy/=9.*O.w+1e-6;
-    F%500<2?O+=vec4((u-.5*R)/9e3,0,.3):O;
-  }
-  `);
+C(g.VERTEX_SHADER,`
+void main(){
+  gl_Position.w=gl_PointSize=1e4;
+}
+`);
 
-  // Compile and attach it to the program
-  g.compileShader(S);
-  //if (!g.getShaderParameter(S, g.COMPILE_STATUS)) {
-  //  g.getShaderInfoLog(S).trim().split("\n").forEach(ss => console.warn("[shader] " + ss))
-  //  throw new Error("Error while compiling shader")
-  //};
-  g.attachShader(P,S);
+C(g.FRAGMENT_SHADER,`
+out highp vec4 O;
+uniform int F;
+uniform sampler2D B;
+#define A texelFetch(B,ivec2(i+u),0)
+void main(){
+  highp vec2 u=gl_FragCoord.xy,v,i=u-u;O-=O;
+  for(int k=0;k++<169;v=A.xy/.1+i,O+=vec4(v-i+v-v*A.w,0,1)*A.w/exp(dot(v,v))/3.142)
+    i=vec2(k%13,k/13)-6.;
+  O.xy/=O.w/.1+1e-6;
+  F%500<2?O+=vec4(u/1e4-.05,0,.3):O;
+}
+`);
 
-  // Link and start the program
-  g.linkProgram(P);
-  g.useProgram(P);
+g.linkProgram(P);
+g.useProgram(P);
 
-  // Define a big triangle the canvas, containing the viewport
-  g.bindBuffer(B=g.ARRAY_BUFFER,g.createBuffer());
-  g.enableVertexAttribArray(0);
-  g.vertexAttribPointer(0,2,g.BYTE,0,0,0);
-  g.bufferData(B,Int8Array.of(-3,1,1,-3,1,1),g.STATIC_DRAW);
+F=0;
+X=[];
+B=[];
+for(i of [0,1]) {
+  g.bindTexture(g.TEXTURE_2D, X[i]=g.createTexture());
+  g.texImage2D(g.TEXTURE_2D, 0, g.RGBA16F, 1024, 1024, 0, g.RGBA, g.FLOAT, null);
+  g.bindFramebuffer(g.FRAMEBUFFER, B[i]=g.createFramebuffer());
+  g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, X[i], 0);
+}
 
-  // Main loop
-  T=0;
-  F=0;
-
-  X = [];
-  B = [];
-  for(i of [0,1]) {
-    g.bindTexture(g.TEXTURE_2D, X[i] = g.createTexture());
-    g.texImage2D(g.TEXTURE_2D, 0, g.RGBA16F, 1024, 1024, 0, g.RGBA, g.FLOAT, null);
-    //g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.NEAREST);
-    //g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.NEAREST);
-    //g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE);
-    //g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
-    g.bindFramebuffer(g.FRAMEBUFFER, B[i] = g.createFramebuffer());
-    g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, X[i], 0);
-  }
-//})();
-
-// Main loop
-setInterval(()=>{
-  for(i of [B[F++%2], null]) {
-  g.bindFramebuffer(g.FRAMEBUFFER, i);
+R=b=>{
+  g.bindFramebuffer(g.FRAMEBUFFER, b);
   g.bindTexture(g.TEXTURE_2D, X[F%2]);
   g.generateMipmap(g.TEXTURE_2D);
-  
-  // Current playback frame
   g.uniform1i(g.getUniformLocation(P,"F"),F);
-  
-  // Viewport resolution
-  g.uniform2f(g.getUniformLocation(P,"R"),1024,1024);
+  g.drawArrays(g.POINTS,0,1);
+}
 
-  // Buffer
-  g.uniform1i(g.getUniformLocation(P,"B"),0);
-  
-  // Draw
-  g.drawArrays(g.TRIANGLE_FAN,0,3);
-  }
-  
-  // Next frame
-  //requestAnimationFrame(L);
-});
+(L=()=>{
+  // render to buffer
+  R(B[F++%2]);
+  // render again to screen
+  R(); 
+  requestAnimationFrame(L);
+})();
 </script>
