@@ -1,8 +1,7 @@
-<canvas id=c width=1024 height=1024>
+<canvas id=c>
 <script>
-H=o=>{
-  for(k in o) o[k.split(/(?=[A-Z0-9])/).map(s=>s.slice(0,2)).join('')] = o[k];
-}
+c.width=c.height=R=1024;
+H=o=>{for(k in o)o[k.split(/(^.|[^a-z])/).map(s=>s[0]).join('')]=o[k]}
 H(window);
 H(c);
 H(g=c.geCo`webgl2`);
@@ -11,52 +10,30 @@ with(g){
   geEx(geSuEx()[0]);
   P=crPr();
   t=35633;
-  C=s=>{
-    shSo(S=crSh(t--),"#version 300 es\n"+s);
-    coSh(S);
-    atSh(P,S);
-  }
+  C=s=>shSo(S=crSh(t--),"#version 300 es\n"+s)|coSh(S)|atSh(P,S);
+  C`void main(){gl_Position.w=gl_PointSize=1e4;}`;
   C`
-  void main(){
-    gl_Position.w=gl_PointSize=1e4;
-  }
-  `;
-  C`
+  #define A texelFetch(B,ivec2(i+u),0)
   out highp vec4 O;
   uniform int F;
   uniform sampler2D B;
-  #define A texelFetch(B,ivec2(i+u),0)
   void main(){
-    highp vec2 u=gl_FragCoord.xy,v,i=u-u;O-=O;
-    for(int k=0;k++<169;v=A.xy/.1+i,O+=vec4(v-i+v-v*A.w,0,1)*A.w/exp(dot(v,v))/3.142)
+    highp vec2 u=gl_FragCoord.xy,v,i;O-=O;
+    for(int k=169;k-->0;v=A.yz+i,O+=vec4(0,v-i+v-v*A.w,1)*A.w/exp(dot(v,v))/3.142)
       i=vec2(k%13,k/13)-6.;
-    O.xy/=O.w/.1+1e-6;
-    F%500<2?O+=vec4(u/1e4-.05,0,.3):O;
+    O.yz/=O.w+1e-6;
+    F%500<2?O+=vec4(0,u/1e3-.5,.3):O;
   }
   `;
   liPr(P);
   usPr(P);
-  F=0;
-  X=[];
-  B=[];
-  for(i of [0,1]) {
-    biTe(t=3553, X[i]=crTe());
-    teIm2D(t, 0, 34842, 1024, 1024, 0, 6408, 5126, null);
-    biFr(f=36160, B[i]=crFr());
-    frTe2D(f, 36064, t, X[i], 0);
-  }
-  R=b=>{
-    biFr(f, b);
-    biTe(t, X[F%2]);
-    geMi(t);
-    un1i(geUnLo(P,'F'),F);
-    drAr(0,0,1);
-  }
+  for(X=[],B=[],i=2;i-->0;)
+    biTe(t=3553,X[i]=crTe())|
+    teIm2D(t,0,34842,R,R,0,6408,5126,c)|
+    biFr(f=36160,B[i]=crFr())|
+    frTe2D(f,36064,t,X[i],0);
+  R=b=>biFr(f,b)|biTe(t,X[i%2])|geMi(t)|un1i(geUnLo(P,'F'),i)|drAr(0,0,1)
 }
 
-(L=()=>{
-  R(B[F++%2]);
-  R();
-  reAnFr(L);
-})();
+(L=T=>R(B[i++%2])|R()|reAnFr(L))()
 </script>
